@@ -19,8 +19,10 @@ logo). Change a number, run the script, play the new version.
    so that you get `packages/models/mapmodels/cubeladder/khmer/…`.
 3. In the game: console, `mode 5` (CTF), then `map cl_angkorwat`.
 
-Every player needs the model pack: a server only sends the `.cgz`. Without the pack the roofs, vaults
-and other models are simply not drawn, while their collision boxes still block.
+Every player needs the models: a server only sends the `.cgz`. Without them the roofs, vaults and
+other models are simply not drawn, while their collision boxes still block. Each model folder is
+self-contained (`tris.md3`, `md3.cfg`, its own `skin.jpg`, `readme.txt`), the layout AssaultCube's
+autodownload expects, so the models can be served from a package server as one zip per model.
 
 ## The map
 

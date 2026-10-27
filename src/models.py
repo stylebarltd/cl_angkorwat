@@ -1022,20 +1022,59 @@ def check_closed(mesh):
     return sum(1 for (a, b), n in e.items() if e.get((b, a), 0) != n)
 
 
+PACK_README = """{key} - {desc}
+Map model for {dist} by {owner}.
+License: CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/)
+Source: https://github.com/stylebarltd/cl_angkorwat
+"""
+
+
+def own_skin(mesh, atlas):
+    """A small skin with only the atlas tiles `mesh` uses, packed into a power-of-two grid of whole
+    tiles (PAD and mipmapping behave as in the atlas), and a copy of the mesh with its UVs moved there."""
+    def tile_of(uv):
+        return int(uv[1] * ATLAS) // TILE * GRID + int(uv[0] * ATLAS) // TILE
+    used = sorted({tile_of(uv) for t in mesh.tris for _, uv in t})
+    g = 1
+    while g * g < len(used): g *= 2
+    size = g * TILE
+    skin = Image.new("RGB", (size, size), (128, 128, 128))
+    where = {}
+    for k, i in enumerate(used):
+        sx, sy = (i % GRID) * TILE, (i // GRID) * TILE
+        dx, dy = (k % g) * TILE, (k // g) * TILE
+        skin.paste(atlas.crop((sx, sy, sx + TILE, sy + TILE)), (dx, dy))
+        where[i] = (dx - sx, dy - sy)
+    out = Mesh()
+    for t in mesh.tris:
+        out.tris.append(tuple((p, ((uv[0] * ATLAS + where[tile_of(uv)][0]) / size,
+                                   (uv[1] * ATLAS + where[tile_of(uv)][1]) / size)) for p, uv in t))
+    return skin, out
+
+
 def build_pack(outdir, folder, models, atlas_name, dist, owner="stylebar"):
-    """Write models {name: (mesh_fn, desc)} to <outdir>/<owner>/<folder>/<name>/ with a shared atlas."""
+    """Write models {name: (mesh_fn, desc)} to <outdir>/<owner>/<folder>/<name>/, each folder
+    self-contained (tris.md3, md3.cfg, skin.jpg, readme.txt). The AssaultCube autodownload fetches a
+    map model as one zip per folder and flattens every path in it, so a skin shared one folder up (the
+    old ../<atlas_name>) would never arrive. Each skin holds only the model's own tiles (`own_skin`),
+    so the game does not load the full atlas once per model. No alpha anywhere, so JPG.
+    `atlas_name` is only removed if an old shared copy is still lying around."""
     atlas = paint_atlas()
     base = os.path.join(outdir, owner, folder)
     os.makedirs(base, exist_ok=True)
-    atlas.save(os.path.join(base, atlas_name))
+    stale = os.path.join(base, atlas_name)
+    if os.path.exists(stale): os.remove(stale)
     rows = []
     for key, (fn, desc) in models.items():
         mesh = fn()
         d = os.path.join(base, key); os.makedirs(d, exist_ok=True)
-        nv, nt = write_md3(os.path.join(d, "tris.md3"), mesh, key)
+        skin, packed = own_skin(mesh, atlas)
+        nv, nt = write_md3(os.path.join(d, "tris.md3"), packed, key)
+        skin.save(os.path.join(d, "skin.jpg"), "JPEG", quality=90)
         open(os.path.join(d, "md3.cfg"), "w").write(
-            f'md3load tris.md3\nmd3skin {key} ../{atlas_name}\nmdlattribute desc "{desc}"\n'
+            f'md3load tris.md3\nmd3skin {key} skin.jpg\nmdlattribute desc "{desc}"\n'
             f'mdlattribute author "{owner}"\nmdlattribute distribution "{dist}"\n')
+        open(os.path.join(d, "readme.txt"), "w").write(PACK_README.format(key=key, desc=desc, dist=dist, owner=owner))
         rows.append((key, nv, nt, check_closed(mesh)))
     return rows
 

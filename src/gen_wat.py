@@ -36,6 +36,8 @@ N = 1 << SF
 SKY = 110                                # room for the great prang (top ~98) and players on it
 TA, TB = 160, 351                        # the playable temple (1st floor ring outer edge)
 KEEP = 0                                 # cells kept round the temple; beyond them solid sky (`strip_scenery`; 3 let players out: the edge clips stood there)
+PATCH = 4                                # moss / grass painted in aligned PATCH x PATCH blocks (quad merging)
+AMBIENT = (140, 118, 92)                 # warm base light (0xRRGGBB in the header); no light grid, see the lights in build()
 SF_OUT, CROP = 8, 128                    # the written map: 256 x 256, cells CROP.. of the build grid (`crop`)
 PA, PB = 194, 317                        # the 2nd floor platform
 F1, F2, FC, FB = 4, 20, 16, 30           # floors: 1st, 2nd, courtyards, central hall balcony
@@ -407,6 +409,12 @@ def jungle(w):
     Different in every quarter."""
     b = w.b
     rnd = random.Random(1999)
+    # Floor moss is painted in whole PATCH x PATCH blocks, aligned to the grid (revision 3, frame rate): the
+    # engine merges 2x2, 4x4 ... cells into one quad only when they are identical, textures included, so
+    # single-cell speckles kept every cell a quad of its own. The random draws below stay as they were, so
+    # plants and vines land where they did.
+    moss = {}                                                                    # (block x, block y) -> texture
+    hsh = lambda a, c_: ((a * 73856093) ^ (c_ * 19349663)) % 1000 / 1000
     near_stairs = lambda x, y, m: any(a - m <= x <= c + m and b_ - m <= y <= d + m for ((a, b_, c, d), _) in STAIRS)
     for k in range(4):                                                           # moss and grass patches
         for _ in range(150):
@@ -415,9 +423,16 @@ def jungle(w):
             for y in range(int(cy - r), int(cy + r) + 1):
                 for x in range(int(cx - r), int(cx + r) + 1):
                     if (x - cx) ** 2 + (y - cy) ** 2 > r * r or rnd.random() < 0.25: continue
-                    c = b.cell(*rot(k, x, y))
-                    if c.type != SOLID and c.floor in (F1, F2, FC, FC + 1, FC + 2, FC + 3):
-                        c.ftex = tex
+                    rx, ry = rot(k, x, y)
+                    moss[(rx // PATCH, ry // PATCH)] = tex
+    def paint_moss(floors):
+        for (bx, by), tex in moss.items():
+            for y in range(by * PATCH, (by + 1) * PATCH):
+                for x in range(bx * PATCH, (bx + 1) * PATCH):
+                    c = b.cell(x, y)
+                    if c.type != SOLID and c.floor in floors: c.ftex = tex
+        moss.clear()
+    paint_moss((F1, F2, FC, FC + 1, FC + 2, FC + 3))
     def plant(k, x, y, idx, floors):
         rx, ry = rot(k, x, y)
         if near_stairs(rx, ry, 3): return False
@@ -449,7 +464,9 @@ def jungle(w):
             for x in range(int(cx - r), int(cx + r) + 1):
                 c = b.cell(x, y)
                 if (x - cx) ** 2 + (y - cy) ** 2 <= r * r and nw(x, y) and c.type != SOLID and rnd.random() < 0.8:
-                    c.ftex = T_GRASS if rnd.random() < 0.6 else T_GRASS2
+                    rnd.random()                                                  # (was the texture; now one per block)
+                    moss[(x // PATCH, y // PATCH)] = T_GRASS if hsh(x // PATCH, y // PATCH) < 0.6 else T_GRASS2
+    paint_moss(range(-64, 128))
     placed = 0
     for _ in range(400):
         if placed == 45: break
@@ -486,20 +503,20 @@ def jungle(w):
         # one cube away from the cell's corner, where the entity stands: the shifted variant
         w.place(x, y, vines(h, (dx, dy) in ((0, 1), (1, 0))), yaw, b.cell(x, y).floor, mirror=False)
         taken.append((x, y))
-    # moss on the walls: patches of wall faces, most of the low broken ones
-    hsh = lambda a, c_: ((a * 73856093) ^ (c_ * 19349663)) % 1000 / 1000
+    # moss on the walls: patches of wall faces, most of the low broken ones (whole blocks, see PATCH)
     for y in range(TA, TB + 1):
         for x in range(TA, TB + 1):
             c = b.cell(x, y)
             if c.type == SOLID: continue
             rise = c.floor - min(b.cell(x + dx, y + dy).floor for (dx, dy) in ((0, -1), (1, 0), (0, 1), (-1, 0)))
-            if rise >= 4 and (hsh(x // 3, y // 3) < (0.5 if x + y <= 470 else 0.25) or (rise <= 9 and hsh(x, y) < 0.55)):
+            bx, by = x // PATCH, y // PATCH
+            if rise >= 4 and (hsh(bx, by) < (0.5 if x + y <= 470 else 0.25) or (rise <= 9 and hsh(bx + 7, by + 3) < 0.55)):
                 c.wtex = T_GRASS
 
 def build():
     w = Wat(); b = w.b; m = b.m
-    m.ambient = 24
-    m.maprevision = 2                     # raise for every version that goes on a server: clients only fetch
+    m.ambient = (AMBIENT[0] << 16) | (AMBIENT[1] << 8) | AMBIENT[2]
+    m.maprevision = 3                     # raise for every version that goes on a server: clients only fetch
                                           # the server's map by themselves when its revision is higher (autogetnewmaprevisions)
     m.waterlevel = -1280                  # no water: AC renders the scene a second time for its reflection
     m.watercolor = (70, 90, 70, 190)
@@ -798,20 +815,14 @@ def build():
                       ("I_GRENADE", 344, 344), ("I_GRENADE", 300, 300),
                       ("I_HEALTH", 244, 200)):                                            # NW ring hallways, near the Ts (mirror: 200, 244)                    # ... a grenade in its 1st floor corner, one in the pagoda hall
         dpair(b, t, x, y, 4)
-    # lights: open terraces and courtyards warm, roofed halls dim, flag pagodas tinted
-    for y in range(TA + 5, TB, 10):
-        for x in range(TA + 5, TB, 10):
-            c = b.cell(x, y)
-            if c.type not in (SOLID, acmap.FHF) and (x, y) not in w.covered and c.ceil - c.floor >= 5:
-                b.light(x, y, radius=14, rgb=(225, 185, 140), dz=8, sym=False)
-    for (x, y) in sorted(w.covered):
-        c = b.cell(x, y)
-        if x % 8 == 0 and y % 8 == 0 and c.type != SOLID and TA <= x <= TB and TA <= y <= TB:
-            b.light(x, y, radius=10, rgb=(150, 110, 70), dz=5, sym=False)
+    # lights (revision 3, frame rate): only a warm coloured ambient (AMBIENT), the flag tints and the two
+    # accent lights. The engine merges 2x2, 4x4 ... cells into one quad only when their light differs by less
+    # than ~12 (world.cpp remip). Lights are cast as rays, and at a distance neighbouring cells catch one, two
+    # or no rays, so every light leaves per-cell noise in proportion to its strength, whatever its radius:
+    # 650 small lights doubled the quads, a 6 x 6 grid of big ones too, even at a third of the brightness.
     fx, fy = RED_FLAG
-    for (x, y) in ((fx, fy), (fx - 6, fy), (fx + 6, fy)):
-        b.light(x, y, radius=9, rgb=(255, 120, 90), dz=6, sym=False)
-        b.light(y, x, radius=9, rgb=(110, 140, 255), dz=6, sym=False)
+    b.light(fx, fy, radius=18, rgb=(170, 80, 60), dz=6, sym=False)
+    b.light(fy, fx, radius=18, rgb=(70, 95, 170), dz=6, sym=False)
     # the courtyards' own plants
     for k in range(4):
         for (x, y, idx, a) in COURT_MODELS[k]:

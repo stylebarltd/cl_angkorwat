@@ -28,7 +28,8 @@ autodownload expects, so the models can be served from a package server as one z
 ## The map
 
 - 256 grid: just the temple, 192 × 192 cells, on the open plain of the skybox. No water, no scenery
-  around it: the earlier version's moat and lawns cost about half the frame rate.
+  around it: the earlier version's moat and lawns cost about half the frame rate. Lit by a warm sunset
+  ambient instead of hundreds of small lights, which also roughly doubles the frame rate.
 - Both bases are on the 2nd floor: red in the south-west pagoda, blue in the north-east one. Blue's
   side is red's mirrored across the diagonal, so the map is fair.
 - Three lanes between the bases: through the courtyards, cross hallways and the great hall; over the

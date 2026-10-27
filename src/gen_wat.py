@@ -387,6 +387,41 @@ def dpair(b, typ, x, y, dz, a1=0, a2=0, team=False):
         b.ent(typ, y, x, dz, a1m, {0: 1, 1: 0}.get(a2, a2) if team else a2, sym=False)
 
 
+def hidden_qr_codes(w, plat, plank_len, pmx, pmy):
+    """The QR hunt (cubeladder.ovh/q/<token>): two codes built as geometry (models.m_qr), from
+    private/qr_codes.json (make_qr.py). That file is the secret and is not in the public repository:
+    without it the codes are left out. One lies on the great pillar's platform beside the lotus bud
+    (seen from above), one hangs under the plank over the flooded pool between two battens (seen from
+    the water, looking up). flip: the engine mirrors our meshes, seeing a plate from below mirrors it
+    again, so the platform code is built mirrored and the plank code not."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "private", "qr_codes.json")
+    if not os.path.exists(path):
+        print("QR hunt: private/qr_codes.json missing, hidden codes left out")
+        return
+    import json
+    codes = {c["key"]: c for c in json.load(open(path))}
+    if "platform" in codes:
+        c = codes["platform"]
+        # the platform is 3.6 from the centre to its edge, the lotus bud 1.2: the code (2.2) in between, a hair
+        # above the platform's top face (no z-fighting)
+        # a model's height is stored in fifths of a cube: place it at a storable height just under the platform's
+        # top and lift the tablet inside the model by the rest (plat + 0.02 alone was rounded into the stone)
+        z0 = math.floor((plat + 0.02) * 5) / 5
+        idx = slot("worn_tablet", lambda r=c["matrix"], oz=plat + 0.02 - z0: models.m_qr(r, 2.2, up=True, flip=True, ox=2.4, oz=oz), "Worn stone tablet")
+        w.place(256, 256, idx, 0, z0, mirror=False)
+    if "plank" in codes:
+        c = codes["plank"]
+        # between the two battens nearest the middle (m_plank: n + 1 battens, 0.4 wide, from -L/2 + 0.3)
+        n = max(2, int(plank_len / 2.5))
+        xs = [-plank_len / 2 + 0.3 + (plank_len - 0.6) * i / n for i in range(n + 1)]
+        gap = (xs[n // 2] + xs[n // 2 + 1]) / 2
+        assert (xs[1] - xs[0]) - 0.4 >= 2.05, "no room for the code between the battens"
+        idx = slot("carved_board", lambda r=c["matrix"], g=gap: models.m_qr(r, 2.0, up=False, flip=False, ox=g), "Carved board")
+        yaw = 1350 if (PLANK[1][0] - PLANK[0][0]) * (PLANK[1][1] - PLANK[0][1]) < 0 else 450
+        w.place(pmx, pmy, idx, yaw, F2 - 0.5 - 0.25 - 0.03, mirror=False)           # just under the boards (no z-fighting)
+    print(f"QR hunt: {len(codes)} hidden code(s) placed")
+
+
 def jungle(w):
     """The forest takes the temple back (Ta Prohm): moss on the floors, bushes, leafy plants and
     trees in the courtyards and on the terrace between the floors, vines hanging down the walls.
@@ -798,6 +833,7 @@ def build():
     logo = slot("cl_plaque", models.m_logo_plaque, "cubeLadder plaque")
     for (lx, ly, yaw) in LOGOS:
         w.place(lx, ly, logo, yaw, b.cell(lx, ly).floor + 1.5, mirror=False)
+    hidden_qr_codes(w, plat, ln, mx, my)
 
     jungle(w)
     b.ents[:] = [e for e in b.ents if not (e.name == "MAPMODEL" and e.attr2 == M_BUSH and (e.x, e.y) in NW_CLEAR)]

@@ -30,6 +30,9 @@ and other models are simply not drawn, while their collision boxes still block.
 - The great hall has two balconies behind baluster windows (the sniper spots), ladders lead onto the
   roofs and up the great prang, stone ledges climb to a platform on the great pillar.
 - 8 spawns per team plus 14 neutral ones, 33 pickups, flags 141 cells apart.
+- **Two QR codes are hidden in the temple.** Scan one with your phone in the game and you level up on
+  [cubeLadder](https://cubeladder.ovh). Where they are is for you to find. (The code on the cubeLadder logo
+  just links to the site.)
 
 ![Floor plan](images/floor-plan.png)
 
@@ -45,7 +48,9 @@ AC_DIR=/path/to/AssaultCube python3 gen_wat.py ../maps/cl_angkorwat.cgz
 ```
 
 This writes the map and the model pack folder (`src/models/cubeladder/khmer`) and checks the layout:
-both teams reach both flags, every item is reachable, nobody can leave the temple.
+both teams reach both flags, every item is reachable, nobody can leave the temple. The hidden QR codes
+come from a private file that is not in this repository, so a build from here leaves them out; use the
+map and the pack in `maps/` and `packages/` to play with them.
 
 | File | What it does |
 |---|---|
@@ -54,6 +59,7 @@ both teams reach both flags, every item is reachable, nobody can leave the templ
 | `src/builder.py` | building blocks: open areas, walls, ramps, pillars, mirrored for CTF |
 | `src/models.py` | MD3 map models built in code, with a painted texture atlas |
 | `src/plan.py` | top-down floor plan and the walkability check |
+| `src/make_qr.py` | makes the hidden codes (private file, not in this repository) |
 
 ## Licence
 

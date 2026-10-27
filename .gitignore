@@ -3,3 +3,5 @@ __pycache__/
 # written by gen_wat.py
 src/models/
 src/*.cgz
+# the hidden QR codes (secret)
+src/private/

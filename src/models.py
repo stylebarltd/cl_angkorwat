@@ -232,7 +232,10 @@ def paint_atlas():
     b = tile("cl_qr"); d.rectangle(b, fill=(255, 255, 255))
     qr = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "assets", "cubeladder-qr.png")
     if _os.path.exists(qr):
-        q = Image.open(qr).convert("RGB")
+        from PIL import ImageOps
+        # pre-mirrored: the engine draws our meshes mirrored, and an unmirrored code came out mirrored in game
+        # (screenshot matched the asset mirrored + turned 90 degrees); phone cameras often reject mirrored codes
+        q = ImageOps.mirror(Image.open(qr).convert("RGB"))
         k = (TILE - 2 * PAD) // q.size[0]                                # whole pixels per module
         q = q.resize((q.size[0] * k, q.size[1] * k), Image.NEAREST)
         im.paste(q, (b[0] + (TILE - q.size[0]) // 2, b[1] + (TILE - q.size[1]) // 2))
@@ -796,6 +799,45 @@ def m_logo_plaque():
     to the east)."""
     m = Mesh()
     m.add(box(0.9, -0.5, 0, 1.0, 0.5, 1.0, "ac12", {"w": "cl_logo"}))
+    return m
+
+
+def m_qr(rows, size, up=True, flip=False, ox=0.0, oy=0.0, quiet=3, oz=0.0):
+    """A QR code as geometry, not as a texture: a light plate with every dark module a thin raised black
+    block (runs of dark modules in a row merged into one block). Nothing of it is in the atlas image, so
+    the code cannot be read off the model pack without rendering the model. rows: the module matrix as
+    strings of '0'/'1'. size: the plate's edge (cubes); quiet: light modules around the code. up: faces +z
+    (lies on a floor, its top at z = 0) or -z (hangs under something, its back at z = 0). flip mirrors
+    the matrix in x: the engine draws our meshes mirrored in x, and seeing a plate from below mirrors it
+    once more, so the caller picks flip to make the code read the right way round in game.
+    oz lifts the whole code inside the model: a mapmodel's height is stored in steps of 0.2 cubes
+    (attr3 / 5), so the caller places it at a storable height and passes the remainder here (a code
+    meant to lie 0.02 above a surface was rounded 0.04 into the stone and vanished)."""
+    n = len(rows)
+    mod = size / (n + 2 * quiet)
+    t, r_ = 0.12, 0.03                                   # plate thickness (reaches into the surface below), raise of the dark modules
+    m = Mesh()
+    h = size / 2
+    if up:
+        m.add(box(ox - h, oy - h, oz - t, ox + h, oy + h, oz, "cl_white"))
+    else:
+        m.add(box(ox - h, oy - h, oz, ox + h, oy + h, oz + t, "cl_white"))
+    for y, row in enumerate(rows):
+        row = row[::-1] if flip else row
+        x = 0
+        while x < n:
+            if row[x] != "1":
+                x += 1
+                continue
+            x1 = x
+            while x1 < n and row[x1] == "1":
+                x1 += 1
+            ax0 = ox - h + (quiet + x) * mod
+            ax1 = ox - h + (quiet + x1) * mod
+            ay0 = oy - h + (quiet + y) * mod
+            ay1 = ay0 + mod
+            m.add(box(ax0, ay0, oz, ax1, ay1, oz + r_, "black") if up else box(ax0, ay0, oz - r_, ax1, ay1, oz, "black"))
+            x = x1
     return m
 
 

@@ -1166,7 +1166,7 @@ def vault_profile(W, H):
     return W / 2 + 0.5, H
 
 
-def m_vault_roof(W, L, H, bw=2.0, variant=0, n=10):
+def m_vault_roof(W, L, H, bw=2.0, variant=0, n=7):
     """Khmer gallery roof: a barrel vault (half ellipse, W/2 + 0.5 wide each side, H high) built of
     rings of small stones, on two stone beams that lie on the pillar rows (z 0..1.3 = beams, z = 0 is
     the pillar tops). L along y. variant picks where the moss grows."""
@@ -1182,11 +1182,11 @@ def m_vault_roof(W, L, H, bw=2.0, variant=0, n=10):
     m.add(box(-L / 2, -(a - t), 1.3, L / 2, a - t, 1.42, "ac12"))
     # solid stone at both ends: seen from outside the vault is a block of stone, not a hollow shell
     curve = lambda y: H * math.sqrt(max(0.0, 1 - (y / a) ** 2))
-    ns = max(2, round(2 * a / 1.5))
+    ns = max(2, round(2 * a / 2.5))                                     # 2.5 / 2.0 / 7: frame rate (2026-10-27, was 1.5 / 1.0 / 10)
     for i in range(ns):
         y0, y1 = -a + 2 * a * i / ns, -a + 2 * a * (i + 1) / ns
         top = min(curve(y0), curve(y1))
-        nr = max(1, int(top / 1.5))
+        nr = max(1, int(top / 2.5))
         for j in range(nr + 1):
             z0 = top * j / nr if j < nr else top
             if j < nr:
@@ -1197,7 +1197,7 @@ def m_vault_roof(W, L, H, bw=2.0, variant=0, n=10):
             mat = "ac12_moss" if rnd.random() < 0.25 + 0.4 * (z0 / H) else "ac12"
             for (e0, e1) in ((-L / 2, -L / 2 + 0.4), (L / 2 - 0.4, L / 2)):
                 m.add(_shift(extrude_x([pt for pt in poly], e0, e1, mat), 0, 0, 1.3))
-    k = max(1, round(L / 1.0))
+    k = max(1, round(L / 2.0))
     ln = L / k
     for i in range(k):
         x0 = -L / 2 + i * ln + 0.04
@@ -1360,7 +1360,7 @@ def m_stone_steps(steps, w=4.0, seed=5):
     return m
 
 
-def m_vines(h, w=6.0, seed=1, n=7):
+def m_vines(h, w=6.0, seed=1, n=4):
     """Vines hanging down a wall: n thin wavy strands from z = h to the ground spread over w (x), just
     in front of the wall (y < 0, the wall face at y = 0), with clumps of leaves along them."""
     import random as _r
@@ -1372,11 +1372,11 @@ def m_vines(h, w=6.0, seed=1, n=7):
         k = max(2, int(length / 1.5))
         pts = [(x + 0.5 * math.sin(j * 0.9 + i), -0.25 - 0.15 * math.sin(j * 1.3), h - length * j / k) for j in range(k + 1)]
         for a, b in zip(pts, pts[1:]):
-            m.add(cyl_between(a, b, 0.11, 0.1, 5, "fig_bark"))
+            m.add(cyl_between(a, b, 0.11, 0.1, 3, "fig_bark", cap=False))     # lighter: frame rate (2026-10-27)
         for p_ in pts[1::2]:
             r = rnd.uniform(0.35, 0.7)
-            m.add(cylinder(p_[0], p_[1] - 0.2, p_[2] - r * 0.5, p_[2] + r * 0.2, r * 0.5, 6, "leaves", r1=r))
-            m.add(cylinder(p_[0], p_[1] - 0.2, p_[2] + r * 0.2, p_[2] + r * 0.6, r, 6, "leaves", r1=r * 0.2))
+            m.add(cylinder(p_[0], p_[1] - 0.2, p_[2] - r * 0.5, p_[2] + r * 0.2, r * 0.5, 4, "leaves", r1=r))
+            m.add(cylinder(p_[0], p_[1] - 0.2, p_[2] + r * 0.2, p_[2] + r * 0.6, r, 4, "leaves", r1=r * 0.2))
     m.add(box(-w / 2 - 0.3, -0.7, h - 0.5, w / 2 + 0.3, 0, h + 0.4, "leaves"))       # the tangle on top
     return m
 
@@ -1386,9 +1386,9 @@ def m_balusters(w=3.0, h=8.0, n=5):
     m = Mesh()
     for i in range(n):
         x = -w / 2 + w * (i + 0.5) / n
-        m.add(cylinder(x, 0, 0, h, 0.2, 8, "ac12"))
+        m.add(cylinder(x, 0, 0, h, 0.2, 6, "ac12"))                          # 6-sided: frame rate (2026-10-27, was 8)
         for f in (0.2, 0.5, 0.8):
-            m.add(cylinder(x, 0, h * f - 0.25, h * f + 0.25, 0.3, 8, "ac12"))
+            m.add(cylinder(x, 0, h * f - 0.25, h * f + 0.25, 0.3, 6, "ac12"))
     return m
 
 

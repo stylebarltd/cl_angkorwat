@@ -23,7 +23,7 @@ is red's mirrored across the NW-SE diagonal.
 
     python3 gen_wat.py [out.cgz]          # also writes the model pack to models/cubeladder/khmer
 """
-import math, os, random, sys
+import copy, math, os, random, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import acmap, models
 from acmap import SOLID, Entity, ENT
@@ -34,8 +34,9 @@ OWNER = "cubeladder"                     # model folder (packages/models/mapmode
 SF = 9                                  # 512 x 512
 N = 1 << SF
 SKY = 110                                # room for the great prang (top ~98) and players on it
-PX0, PY0, PX1, PY1 = 84, 84, 427, 427    # open map area (scenery included)
 TA, TB = 160, 351                        # the playable temple (1st floor ring outer edge)
+KEEP = 0                                 # cells kept round the temple; beyond them solid sky (`strip_scenery`; 3 let players out: the edge clips stood there)
+SF_OUT, CROP = 8, 128                    # the written map: 256 x 256, cells CROP.. of the build grid (`crop`)
 PA, PB = 194, 317                        # the 2nd floor platform
 F1, F2, FC, FB = 4, 20, 16, 30           # floors: 1st, 2nd, courtyards, central hall balcony
 E1, E2, EP, EC = 16, 32, 34, 48          # pillar tops: 1st floor gallery, hallways; walls: corner halls, central hall
@@ -43,7 +44,6 @@ E1, E2, EP, EC = 16, 32, 34, 48          # pillar tops: 1st floor gallery, hallw
 # textures (0-based ids of default_map_settings.cfg)
 T_STONE, T_SLAB, T_FLAG, T_LATERITE = 12, 50, 45, 23
 T_ROUGH, T_GRASS, T_GRASS2, T_MUD, T_ROCK, T_SAND = 26, 133, 132, 138, 160, 141
-T_PALE = 13                               # pale beige sandstone (gray_bricks_02)
 # The embedded config resets the mapmodel list (an entity stores its model slot in one byte, so
 # 202 defaults + this map's custom models would overflow 255). Our list: these defaults first
 # (same parameters as default_map_settings.cfg), then the custom models.
@@ -66,10 +66,6 @@ def slot(key, fn, desc, scale=0):
     i = FIRST_CUSTOM + SLOTS.index(key)
     assert i <= 255, "too many mapmodel slots"
     return i
-
-
-def gal_slot(W, L, H):
-    return slot(f"galroof_{W}x{L}_h{H}", lambda: models.m_gallery_roof(W, L, H), f"Khmer gallery roof {W}x{L}")
 
 
 def vault_slot(W, L, H, bw, variant):
@@ -236,23 +232,6 @@ def blocks(w, k, items, base, tex=T_ROUGH):
         box = rbox(k, x0, y0, x1, y1)
         z = base if base is not None else max(w.b.cell(x, y).floor for x in range(box[0], box[2] + 1) for y in range(box[1], box[3] + 1))
         w.b.wall(*box, z + h, tex, ftex=tex, sym=False)
-
-
-def scatter(w, k, box, n, seed, avoid=(), hmax=2):
-    """n fallen blocks (1-3 cells, 1..hmax high) at random in a quarter-frame box, not touching the
-    `avoid` boxes; each stands on the highest floor under it."""
-    rnd = random.Random(seed)
-    x0, y0, x1, y1 = box
-    placed = 0
-    for _ in range(n * 20):
-        if placed == n: break
-        sx, sy = rnd.randint(1, 3), rnd.randint(1, 3)
-        bx, by = rnd.randint(x0, x1 - sx + 1), rnd.randint(y0, y1 - sy + 1)
-        if any(bx <= ax1 + 1 and bx + sx - 1 >= ax0 - 1 and by <= ay1 + 1 and by + sy - 1 >= ay0 - 1 for (ax0, ay0, ax1, ay1) in avoid):
-            continue
-        tex = (T_ROUGH, T_STONE, T_GRASS, T_ROUGH, 9)[rnd.randint(0, 4)]
-        blocks(w, k, [(bx, by, bx + sx - 1, by + sy - 1, rnd.randint(1, hmax))], None, tex)
-        placed += 1
 
 
 # ── layout after the design sketch v2 (absolute cells) ────────────────────────────────────────────
@@ -520,51 +499,14 @@ def jungle(w):
 def build():
     w = Wat(); b = w.b; m = b.m
     m.ambient = 24
-    m.waterlevel = -5
+    m.maprevision = 2                     # raise for every version that goes on a server: clients only fetch
+                                          # the server's map by themselves when its revision is higher (autogetnewmaprevisions)
+    m.waterlevel = -1280                  # no water: AC renders the scene a second time for its reflection
     m.watercolor = (70, 90, 70, 190)
 
-    # ── scenery: jungle bank, moat, compound wall, lawns (all out of reach) ─────────────────
-    b.solid(PX0 - 4, PY0 - 4, PX1 + 4, PY1 + 4, 0, sym=False)                   # sky-textured: shows the skybox
-    b.open(PX0, PY0, PX1, PY1, floor=1, ftex=T_GRASS, wtex=T_ROCK, sym=False)
-    # the jungle hills at the edge: half the sky height, a ragged top, a few gaps to the horizon
-    rnd = random.Random(9)
-    side = PX1 - PX0 + 1
-    for k in range(4):
-        for p in range(0, side, 4):
-            gap = (p + 37 * k) % 97 < 8
-            top = 6 + rnd.randint(0, 3) if gap else int(44 + 6 * math.sin(p / 17 + k) + 3 * math.sin(p / 5.3) + rnd.uniform(-1, 1))
-            for d in range(4):
-                h = top - (4 * d if not gap else 0)
-                x0, y0, x1, y1 = rbox(k, PX0 + p, PY0 + d, min(PX1, PX0 + p + 3), PY0 + d)
-                b.wall(x0, y0, x1, y1, max(2, h), T_ROCK, ftex=T_GRASS, sym=False)
-    for i in range(20):
-        b.ring(96, 96, 415, 415, i, b.open, floor=-min(i + 1, 20 - i, 5), ftex=T_MUD, wtex=T_LATERITE, sym=False)
-    b.open(116, 116, 395, 395, floor=0, ftex=T_GRASS2, wtex=T_LATERITE, sym=False)  # darker than the temple's moss
-    # a pale sandstone terrace all round the temple: frames the playable area on the minimap
-    b.open(TA - 12, TA - 12, TB + 12, TB + 12, floor=1, ftex=T_PALE, wtex=T_LATERITE, sym=False)
-    for i in (0, 1):
-        b.ring(122, 122, 389, 389, i, b.wall, height=7, wtex=T_LATERITE, ftex=T_LATERITE, sym=False)
-    for (x0, y0, x1, y1) in ((122, 170, 123, 177), (190, 122, 197, 123), (300, 122, 305, 123)):
-        b.wall(x0, y0, x1, y1, 2, T_ROUGH, ftex=T_ROUGH)                         # collapsed wall stretches
-    # west causeway over the moat into the west gopura (mirror: east), naga balustrades
-    b.open(PX0, 250, 129, 261, floor=1, ftex=T_FLAG, wtex=T_STONE)
-    b.wall(PX0 + 2, 249, 115, 249, 3, T_STONE, ftex=T_STONE); b.wall(PX0 + 2, 262, 115, 262, 3, T_STONE, ftex=T_STONE)
-    b.ring(116, 236, 129, 275, 0, b.wall, height=10, wtex=T_STONE, ftex=T_STONE)
-    b.open(116, 251, 116, 260, floor=1, ftex=T_FLAG); b.open(129, 251, 129, 260, floor=1, ftex=T_FLAG)
-    w.roof(116, 248, 129, 263, pav_slot(14, 16, 14, 3), 10, False, mirror=True)
-    w.roof(116, 236, 129, 247, gal_slot(14, 12, 6), 10, False, mirror=True)
-    w.roof(116, 264, 129, 275, gal_slot(14, 12, 6), 10, False, mirror=True)
-    b.open(130, 250, 156, 261, floor=1, ftex=T_FLAG, wtex=T_STONE)
-    b.wall(130, 249, 156, 249, 3, T_STONE, ftex=T_STONE); b.wall(130, 262, 156, 262, 3, T_STONE, ftex=T_STONE)
-    for (y0, y1) in ((190, 205), (306, 321)):                                    # libraries
-        b.ring(132, y0, 145, y1, 0, b.wall, height=10, wtex=T_STONE, ftex=T_STONE)
-        b.open(133, y0 + 1, 144, y1 - 1, floor=1, ftex=T_FLAG, wtex=T_STONE)
-        b.open(145, y0 + 5, 145, y0 + 10, floor=1, ftex=T_FLAG)
-        w.roof(132, y0, 145, y1, pav_slot(14, 16, 10, 2), 10, False, mirror=True)
-    for k in (0, 1):
-        scatter(w, k, (126, 126, 384, 154), 26, 900 + k)                         # stones on the lawns
-    for (x, y, sx, sy) in ((134, 214, 8, 6), (170, 130, 10, 5), (260, 134, 9, 6)):
-        b.open(x, y, x + sx - 1, y + sy - 1, floor=0, ftex=T_GRASS2)
+    # everything round the temple is sky-textured solid (shows the skybox). The moat, lawns, compound
+    # wall, gates and trees were cut on 2026-10-27 for frame rate (see `strip_scenery`).
+    b.solid(0, 0, N - 1, N - 1, 0, sym=False)
 
     # ── the temple: 1st floor ring (only the south-east L is reached, by the stairs) ──────────
     b.open(157, 157, 354, 354, floor=2, ftex=T_SLAB, wtex=T_LATERITE, sym=False)  # base step
@@ -857,12 +799,6 @@ def build():
                       ("I_HEALTH", 244, 200)):                                            # NW ring hallways, near the Ts (mirror: 200, 244)                    # ... a grenade in its 1st floor corner, one in the pagoda hall
         dpair(b, t, x, y, 4)
     # lights: open terraces and courtyards warm, roofed halls dim, flag pagodas tinted
-    for y in range(PY0 + 10, PY1, 20):
-        for x in range(PX0 + 10, PX1, 20):
-            if TA - 4 <= x <= TB + 4 and TA - 4 <= y <= TB + 4: continue
-            c = b.cell(x, y)
-            if c.type not in (SOLID, acmap.FHF) and c.ceil - c.floor >= 5:
-                b.light(x, y, radius=24, rgb=(225, 185, 140), dz=10, sym=False)
     for y in range(TA + 5, TB, 10):
         for x in range(TA + 5, TB, 10):
             c = b.cell(x, y)
@@ -876,39 +812,52 @@ def build():
     for (x, y) in ((fx, fy), (fx - 6, fy), (fx + 6, fy)):
         b.light(x, y, radius=9, rgb=(255, 120, 90), dz=6, sym=False)
         b.light(y, x, radius=9, rgb=(110, 140, 255), dz=6, sym=False)
-    # trees: jungle on the bank, palms on the lawns, the courtyards' own plants
-    for i, t in enumerate(range(PY0 + 6, PY1 - 4, 11)):
-        if not 240 <= t <= 272:
-            b.model(PX0 + 6, t, M_TREE if i % 3 else M_PALM, (i * 700) % 3600)
-            b.model(t, PY0 + 6, M_TREE2 if i % 2 else M_PALM, (i * 900) % 3600)
-    for (x, y, idx) in ((134, 180, M_PALM), (142, 236, M_PALM), (142, 276, M_PALM), (176, 134, M_TREE), (230, 136, M_PALM),
-                        (275, 134, M_TREE2), (330, 136, M_PALM), (139, 340, M_TREE), (136, 225, M_BUSH), (196, 144, M_SMALLTREE)):
-        b.model(x, y, idx, (x * 31 + y * 7) % 3600)
+    # the courtyards' own plants
     for k in range(4):
         for (x, y, idx, a) in COURT_MODELS[k]:
             rx, ry = rot(k, x, y)
             b.model(rx, ry, idx, (a - 900 * k) % 3600, sym=False)
-    naga = slot("naga", models.m_naga, "Seven-headed naga")
     big_naga = slot("naga_big", models.m_naga, "Seven-headed naga, temple size", scale=1.6)
     moss_naga = slot("naga_big_moss", lambda: models.m_naga(True), "Seven-headed naga, temple size, overgrown", scale=1.6)
-    moss_small = slot("naga_moss", lambda: models.m_naga(True), "Seven-headed naga, overgrown")
     for k in range(4):                                                            # in every T, facing the great pagoda
         px, py = rotp(k, 256, 206)
         w.place(px, py, moss_naga if k in (2, 3) else big_naga, (2700 - 900 * k + 1800 * (k % 2)) % 3600, F2, mirror=False)   # east and west turned in game
         w.rawclip(px, py, 3, 3, F2, 9)
-    for (x, y, a) in ((86, 249, 2700), (86, 262, 2700), (115, 249, 900), (115, 262, 900), (130, 249, 2700),
-                      (130, 262, 2700), (156, 249, 900), (156, 262, 900)):
-        b.model(x, y, naga if (x + y) % 2 else moss_small, a)
 
     # ── header extras ────────────────────────────────────────────────────────────────────
-    config = 'fog 1024\nfogcolour 0xD8A070\nloadsky "ladynighthawk/inhcanyons1"\nshadowyaw 300\nwatercolour 70 90 70 190\n'
+    config = 'fog 1024\nfogcolour 0xD8A070\nloadsky "ladynighthawk/inhcanyons1"\nshadowyaw 300\n'
     config += "mapmodelreset\n" + "".join(f'mapmodel {a} "{n}"\n' for a, n in DEFAULT_MODELS)
     config += "".join(f'mapmodel 0 0 0 {SCALE[k]} "{OWNER}/khmer/{k}"\n' for k in SLOTS)
-    m.extras = make_extras((100, 256, 40, 90, -8), "cc-by-sa-4.0",
+    m.extras = make_extras((166 - CROP, 166 - CROP, 52, 135, -14), "cc-by-sa-4.0",       # over the NW corner, in written coordinates
                            "Angkor Wat temple CTF: both bases on the 2nd floor, three lanes (2nd floor middle and side, "
                            "a 1st floor flank in the south-east), covered hallways, sunken courtyards, five towers under "
                            "prang roofs, a sniper balcony. By cubeLadder. Models: cubeladder/khmer pack.", config)
     return b.finish()
+
+
+def strip_scenery(m):
+    """Performance (2026-10-27, 32 fps reported): the moat's water was rendered twice (reflection) and the
+    lawns, moat, compound wall and trees were drawn from every roof. Everything further than KEEP cells
+    outside the temple becomes solid sky (the skybox shows behind the temple), and its entities go."""
+    A, B = TA - KEEP, TB + KEEP
+    for y in range(m.ssize):
+        for x in range(m.ssize):
+            if not (A <= x <= B and A <= y <= B):
+                c = m.cell(x, y); c.type = acmap.SOLID; c.wtex = 0; c.vdelta = 0
+    m.entities = [e for e in m.entities if A <= e.x <= B and A <= e.y <= B]
+    return m
+
+
+def crop(m):
+    """The written map: the 256 x 256 window from CROP of the build grid (the temple plus a solid border)."""
+    out = copy.deepcopy(m)
+    n = 1 << SF_OUT
+    assert CROP + 2 <= TA - KEEP and TB + KEEP <= CROP + n - 3, "temple does not fit the window"
+    out.sfactor = SF_OUT
+    out.cells = [m.cell(CROP + x, CROP + y) for y in range(n) for x in range(n)]
+    for e in out.entities:
+        e.x -= CROP; e.y -= CROP
+    return out
 
 
 def check(m):
@@ -953,12 +902,15 @@ def check(m):
 
 if __name__ == "__main__":
     out = sys.argv[1] if len(sys.argv) > 1 else f"maps/{NAME}.cgz"
-    m = build()
+    m = strip_scenery(build())
     os.makedirs(os.path.dirname(out) or ".", exist_ok=True)
-    acmap.write(m, out)
+    acmap.write(crop(m), out)
     back = acmap.read(out)
+    n = back.ssize
+    same = lambda c: (c.type, c.wtex, c.vdelta) if c.type == SOLID else c.key()      # a solid cell stores only these
+    assert all(same(back.cell(x, y)) == same(m.cell(CROP + x, CROP + y)) for y in range(n) for x in range(n)), "crop round trip"
     print(f"wrote {out}: {back.ssize}x{back.ssize}, {len(back.entities)} entities, extras {len(back.extras)} B, {len(SLOTS)} custom models")
     rows = models.build_pack("models", "khmer", PACK, "khmer_atlas.png", NAME, owner=OWNER)
     bad = [r for r in rows if r[3]]
     print(f"model pack: {len(rows)} models" + (f", NOT CLOSED: {bad}" if bad else ", all closed"))
-    check(back)
+    check(m)                                     # in build coordinates (the crop is a pure shift)

@@ -16,7 +16,8 @@ logo). Change a number, run the script, play the new version.
    Copy `maps/preview/cl_angkorwat.jpg` into `packages/maps/preview/` too: the picture in the
    map menu (singleplayer, map list).
 2. Unzip `packages/cubeladder_khmer_pack.zip` into `packages/models/mapmodels/`
-   so that you get `packages/models/mapmodels/cubeladder/khmer/…`.
+   so that you get `packages/models/mapmodels/cubeladder/khmer/…`. Had an older pack? Unzip the new one
+   over it: the models are lighter now, under the same names.
 3. In the game: console, `mode 5` (CTF), then `map cl_angkorwat`.
 
 Every player needs the models: a server only sends the `.cgz`. Without them the roofs, vaults and
@@ -26,7 +27,8 @@ autodownload expects, so the models can be served from a package server as one z
 
 ## The map
 
-- 512 grid; the playable temple is 192 × 192 cells, the moat, lawns and outer wall are scenery.
+- 256 grid: just the temple, 192 × 192 cells, on the open plain of the skybox. No water, no scenery
+  around it: the earlier version's moat and lawns cost about half the frame rate.
 - Both bases are on the 2nd floor: red in the south-west pagoda, blue in the north-east one. Blue's
   side is red's mirrored across the diagonal, so the map is fair.
 - Three lanes between the bases: through the courtyards, cross hallways and the great hall; over the

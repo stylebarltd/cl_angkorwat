@@ -13,6 +13,8 @@ logo). Change a number, run the script, play the new version.
 
 1. Copy `maps/cl_angkorwat.cgz` into `packages/maps/` of your AssaultCube folder
    (on Linux usually `~/.assaultcube/v1.3/packages/maps/`).
+   Copy `maps/preview/cl_angkorwat.jpg` into `packages/maps/preview/` too: the picture in the
+   map menu (singleplayer, map list).
 2. Unzip `packages/cubeladder_khmer_pack.zip` into `packages/models/mapmodels/`
    so that you get `packages/models/mapmodels/cubeladder/khmer/…`.
 3. In the game: console, `mode 5` (CTF), then `map cl_angkorwat`.
